@@ -1,0 +1,37 @@
+SELECT 
+	RankingTableBuilder.RawSalesforceID
+	, RankingTableBuilder.DedupedSalesforceID
+	, RankingTableBuilder.ActionType
+	, RankingTableBuilder.ActionContext
+	, RankingTableBuilder.ActionDetail
+	, RankingTableBuilder.ActionCampaign
+	, RankingTableBuilder.EventDate
+	, RankingTableBuilder.DaysAgo
+	, RankingTableBuilder.Therank 
+	, CASE WHEN RankingTableBuilder.AccountID IS NULL THEN InferredAccounts.AccountID END AS AccountID
+	, NURT001_PointsAndHops.Segment
+	, NURT001_PointsAndHops.Theme
+	, NURT001_PointsAndHops.BakeOffPoints
+	, NURT001_PointsAndHops.JustHopToNextOrdinal
+	, NURT001_PointsAndHops.HopToThisSpecificOrdinal
+FROM
+(
+	SELECT
+		SendLog.SubscriberKey AS RawSalesforceID
+		, SendLog.DedupedSalesforceID
+		,'EmailSent' AS ActionType
+		, '' AS ActionContext
+		, SendLog.EmailName AS ActionDetail
+		, SendLog.SalesforceTacticIDID AS ActionCampaign
+		, SendLog.SentDate AS EventDate
+		, DATEDIFF(day, SendLog.SentDate, GETDATE()) AS DaysAgo
+		, RANK() OVER (PARTITION BY DedupedSalesforceID ORDER BY DATEDIFF(day, SendLog.SentDate, GETDATE()) DESC) AS Therank
+		, SendLog.AccountID AS AccountID
+	FROM NURT000_01_CustomSendLog_DedupedSalesforceID SendLog 
+) RankingTableBuilder
+JOIN NURT001_PointsAndHops 
+	on NURT001_PointsAndHops.ActionType = 'EmailSent'
+	AND NURT001_PointsAndHops.ActionDetail = RankingTableBuilder.ActionDetail
+LEFT JOIN SYST007_InferredAccountForLeadOrContact InferredAccounts on InferredAccounts.DedupedSalesforceID = RankingTableBuilder.DedupedSalesforceID
+WHERE 
+	RankingTableBuilder.Therank = 1
